@@ -1298,7 +1298,7 @@ func TestToolsCallHandlerWithSecureParams(t *testing.T) {
 				}
 			}`,
 			wantErr:     true,
-			errContains: "requires secure-params extension which is not supported by the client",
+			errContains: "requires com.google.cloud/secure-params extension which is not supported by the client",
 		},
 		{
 			desc: "Secure parameter passed in standard arguments",
@@ -1319,7 +1319,9 @@ func TestToolsCallHandlerWithSecureParams(t *testing.T) {
 							"version": "1.0"
 						},
 						"io.modelcontextprotocol/clientCapabilities": {
-							"toolbox/secure-params": true
+							"experimental": {
+								"com.google.cloud/secure-params": true
+							}
 						}
 					}
 				}
@@ -1347,7 +1349,9 @@ func TestToolsCallHandlerWithSecureParams(t *testing.T) {
 							"version": "1.0"
 						},
 						"io.modelcontextprotocol/clientCapabilities": {
-							"toolbox/secure-params": true
+							"experimental": {
+								"com.google.cloud/secure-params": true
+							}
 						}
 					}
 				}
@@ -1376,7 +1380,9 @@ func TestToolsCallHandlerWithSecureParams(t *testing.T) {
 							"version": "1.0"
 						},
 						"io.modelcontextprotocol/clientCapabilities": {
-							"toolbox/secure-params": true
+							"experimental": {
+								"com.google.cloud/secure-params": true
+							}
 						}
 					}
 				}
