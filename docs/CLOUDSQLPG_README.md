@@ -56,6 +56,7 @@ The Cloud SQL for PostgreSQL MCP server provides the following tools:
 | Tool Name                        | Description                                                    |
 |:---------------------------------|:---------------------------------------------------------------|
 | `execute_sql`                    | Use this tool to execute sql.                                  |
+| `execute_sql_readonly`           | Executes a read-only SQL query (explicitly enforces readOnlyHint). |
 | `list_tables`                    | Lists detailed schema information for user-created tables.     |
 | `list_active_queries`            | List the top N currently running queries.                      |
 | `list_available_extensions`      | Discover all PostgreSQL extensions available for installation. |
@@ -94,6 +95,7 @@ export CLOUD_SQL_POSTGRES_DATABASE="<your-database-name>"
 export CLOUD_SQL_POSTGRES_USER="<your-database-user>"  # Optional
 export CLOUD_SQL_POSTGRES_PASSWORD="<your-database-password>"  # Optional
 export CLOUD_SQL_POSTGRES_IP_TYPE="PUBLIC"  # Optional: `PUBLIC`, `PRIVATE`, `PSC`. Defaults to `PUBLIC`.
+export CLOUDSQL_PG_READONLY="true" # Optional: Restricts tools and executes queries on read-only endpoints.
 ```
 
 Add the following configuration to your MCP client (e.g., `settings.json` for Gemini CLI, `mcp_config.json` for Antigravity):

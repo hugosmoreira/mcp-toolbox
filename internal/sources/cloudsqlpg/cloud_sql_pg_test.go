@@ -142,6 +142,35 @@ func TestParseFromYamlCloudSQLPg(t *testing.T) {
 				},
 			},
 		},
+		{
+			desc: "readonly set to true",
+			in: `
+			kind: source
+			name: my-pg-instance
+			type: cloud-sql-postgres
+			project: my-project
+			region: my-region
+			instance: my-instance
+			database: my_db
+			user: my_user
+			password: my_pass
+			readonly: true
+			`,
+			want: map[string]sources.SourceConfig{
+				"my-pg-instance": cloudsqlpg.Config{
+					Name:     "my-pg-instance",
+					Type:     cloudsqlpg.SourceType,
+					Project:  "my-project",
+					Region:   "my-region",
+					Instance: "my-instance",
+					IPType:   "public",
+					Database: "my_db",
+					User:     "my_user",
+					Password: "my_pass",
+					ReadOnly: true,
+				},
+			},
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.desc, func(t *testing.T) {
