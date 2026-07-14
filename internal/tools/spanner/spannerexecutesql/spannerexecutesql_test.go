@@ -15,6 +15,7 @@
 package spannerexecutesql_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -93,4 +94,78 @@ func TestParseFromYamlExecuteSql(t *testing.T) {
 		})
 	}
 
+}
+
+func TestInitialize_ReadOnlyValidation(t *testing.T) {
+	ctx := context.Background()
+
+	ptr := func(b bool) *bool { return &b }
+
+	tcs := []struct {
+		desc         string
+		cfg          spannerexecutesql.Config
+		wantReadOnly bool
+	}{
+		{
+			desc: "no conflict - both true",
+			cfg: spannerexecutesql.Config{
+				ConfigBase:  tools.ConfigBase{Name: "test-tool", Description: "desc"},
+				ReadOnly:    true,
+				Annotations: &tools.ToolAnnotations{ReadOnlyHint: ptr(true)},
+			},
+			wantReadOnly: true,
+		},
+		{
+			desc: "no conflict - both false",
+			cfg: spannerexecutesql.Config{
+				ConfigBase:  tools.ConfigBase{Name: "test-tool", Description: "desc"},
+				ReadOnly:    false,
+				Annotations: &tools.ToolAnnotations{ReadOnlyHint: ptr(false)},
+			},
+			wantReadOnly: false,
+		},
+		{
+			desc: "no conflict - readOnlyHint nil",
+			cfg: spannerexecutesql.Config{
+				ConfigBase:  tools.ConfigBase{Name: "test-tool", Description: "desc"},
+				ReadOnly:    true,
+				Annotations: &tools.ToolAnnotations{ReadOnlyHint: nil},
+			},
+			wantReadOnly: true,
+		},
+		{
+			desc: "precedence - readOnly false, readOnlyHint true overrides to true",
+			cfg: spannerexecutesql.Config{
+				ConfigBase:  tools.ConfigBase{Name: "test-tool", Description: "desc"},
+				ReadOnly:    false,
+				Annotations: &tools.ToolAnnotations{ReadOnlyHint: ptr(true)},
+			},
+			wantReadOnly: true,
+		},
+		{
+			desc: "precedence - readOnly true, readOnlyHint false overrides to false",
+			cfg: spannerexecutesql.Config{
+				ConfigBase:  tools.ConfigBase{Name: "test-tool", Description: "desc"},
+				ReadOnly:    true,
+				Annotations: &tools.ToolAnnotations{ReadOnlyHint: ptr(false)},
+			},
+			wantReadOnly: false,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.desc, func(t *testing.T) {
+			tool, err := tc.cfg.Initialize(ctx)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			gotCfg, ok := tool.ToConfig().(spannerexecutesql.Config)
+			if !ok {
+				t.Fatalf("expected Config type, got %T", tool.ToConfig())
+			}
+			if gotCfg.ReadOnly != tc.wantReadOnly {
+				t.Errorf("expected ReadOnly to be %t, got %t", tc.wantReadOnly, gotCfg.ReadOnly)
+			}
+		})
+	}
 }

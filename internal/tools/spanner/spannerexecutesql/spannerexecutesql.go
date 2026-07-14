@@ -69,6 +69,10 @@ func (cfg Config) Initialize(context.Context) (tools.Tool, error) {
 		return nil, fmt.Errorf("description is required for tool %q", cfg.Name)
 	}
 
+	if cfg.Annotations != nil && cfg.Annotations.ReadOnlyHint != nil {
+		cfg.ReadOnly = *cfg.Annotations.ReadOnlyHint
+	}
+
 	sqlParameter := parameters.NewStringParameter("sql", "The sql to execute.")
 	params := parameters.Parameters{sqlParameter}
 
