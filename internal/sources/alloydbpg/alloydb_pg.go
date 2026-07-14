@@ -30,6 +30,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+const readOnlySessionOpts = " options='-c alloydb_session_read_only=locked'"
+
 const SourceType string = "alloydb-postgres"
 
 // validate interface
@@ -61,6 +63,7 @@ type Config struct {
 	Password     string         `yaml:"password"`
 	Database     string         `yaml:"database" validate:"required"`
 	SQLCommenter *bool          `yaml:"sqlCommenter"`
+	ReadOnly     bool           `yaml:"readonly"`
 }
 
 func (r Config) SourceConfigType() string {
@@ -68,7 +71,7 @@ func (r Config) SourceConfigType() string {
 }
 
 func (r Config) Initialize(ctx context.Context, tracer trace.Tracer) (sources.Source, error) {
-	pool, err := initAlloyDBPgConnectionPool(ctx, tracer, r.Name, r.Project, r.Region, r.Cluster, r.Instance, r.IPType.String(), r.User, r.Password, r.Database)
+	pool, err := initAlloyDBPgConnectionPool(ctx, tracer, r.Name, r.Project, r.Region, r.Cluster, r.Instance, r.IPType.String(), r.User, r.Password, r.Database, r.ReadOnly)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create pool: %w", err)
 	}
@@ -102,6 +105,10 @@ func (s *Source) SourceType() string {
 
 func (s *Source) ToConfig() sources.SourceConfig {
 	return s.Config
+}
+
+func (s *Source) IsReadOnlyMode() bool {
+	return s.ReadOnly
 }
 
 func (s *Source) PostgresPool() *pgxpool.Pool {
@@ -155,7 +162,7 @@ func getOpts(ipType, userAgent string, useIAM bool) ([]alloydbconn.Option, error
 	return opts, nil
 }
 
-func getConnectionConfig(ctx context.Context, user, pass, dbname string) (string, bool, error) {
+func getConnectionConfig(ctx context.Context, user, pass, dbname string, readOnly bool) (string, bool, error) {
 	userAgent, err := util.UserAgentFromContext(ctx)
 	if err != nil {
 		userAgent = "genai-toolbox"
@@ -165,6 +172,9 @@ func getConnectionConfig(ctx context.Context, user, pass, dbname string) (string
 	// If username and password both provided, use password authentication
 	if user != "" && pass != "" {
 		dsn := fmt.Sprintf("user=%s password=%s dbname=%s sslmode=disable application_name=%s", user, pass, dbname, userAgent)
+		if readOnly {
+			dsn += readOnlySessionOpts
+		}
 		useIAM = false
 		return dsn, useIAM, nil
 	}
@@ -185,15 +195,18 @@ func getConnectionConfig(ctx context.Context, user, pass, dbname string) (string
 
 	// Construct IAM connection string with username
 	dsn := fmt.Sprintf("user=%s dbname=%s sslmode=disable application_name=%s", user, dbname, userAgent)
+	if readOnly {
+		dsn += readOnlySessionOpts
+	}
 	return dsn, useIAM, nil
 }
 
-func initAlloyDBPgConnectionPool(ctx context.Context, tracer trace.Tracer, name, project, region, cluster, instance, ipType, user, pass, dbname string) (*pgxpool.Pool, error) {
+func initAlloyDBPgConnectionPool(ctx context.Context, tracer trace.Tracer, name, project, region, cluster, instance, ipType, user, pass, dbname string, readOnly bool) (*pgxpool.Pool, error) {
 	//nolint:all // Reassigned ctx
 	ctx, span := sources.InitConnectionSpan(ctx, tracer, SourceType, name)
 	defer span.End()
 
-	dsn, useIAM, err := getConnectionConfig(ctx, user, pass, dbname)
+	dsn, useIAM, err := getConnectionConfig(ctx, user, pass, dbname, readOnly)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get AlloyDB connection config: %w", err)
 	}

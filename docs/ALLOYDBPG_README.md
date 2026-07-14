@@ -58,6 +58,7 @@ The AlloyDB MCP server provides the following tools:
 |:---------------------------------|:-----------------------------------------------------------|
 | `list_tables`                    | Lists detailed schema information for user-created tables. |
 | `execute_sql`                    | Executes a SQL query.                                      |
+| `execute_sql_readonly`           | Executes a read-only SQL query (explicitly enforces readOnlyHint). |
 | `list_active_queries`            | List currently running queries.                            |
 | `list_available_extensions`      | List available extensions for installation.                |
 | `list_installed_extensions`      | List installed extensions.                                 |
@@ -81,6 +82,7 @@ export ALLOYDB_POSTGRES_DATABASE="<your-database-name>"
 export ALLOYDB_POSTGRES_USER="<your-database-user>"  # Optional
 export ALLOYDB_POSTGRES_PASSWORD="<your-database-password>"  # Optional
 export ALLOYDB_POSTGRES_IP_TYPE="PUBLIC"  # Optional: `PUBLIC`, `PRIVATE`, `PSC`. Defaults to `PUBLIC`.
+export ALLOYDB_READONLY="true" # Optional: Enforces read-only session state on the database connection to prevent any write operations.
 ```
 
 Add the following configuration to your MCP client (e.g., `settings.json` for Gemini CLI, `mcp_config.json` for Antigravity):
