@@ -143,6 +143,10 @@ func (f *fakeSource) ToConfig() sources.SourceConfig {
 	return nil
 }
 
+func (f *fakeSource) IsReadOnly() bool {
+	return false
+}
+
 func (f *fakeSource) Initialize(ctx context.Context, tracer interface{}) (sources.Source, error) {
 	return f, nil
 }

@@ -92,6 +92,7 @@ func (m mockSpannerSource) InvokeSearchCatalog(ctx context.Context, params map[s
 }
 func (m mockSpannerSource) SourceType() string             { return "spanner" }
 func (m mockSpannerSource) ToConfig() sources.SourceConfig { return nil }
+func (m mockSpannerSource) IsReadOnly() bool               { return false }
 
 func TestConfig_Initialize(t *testing.T) {
 	cfg := spannersearchcatalog.Config{

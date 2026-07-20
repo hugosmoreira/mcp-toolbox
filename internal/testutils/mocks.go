@@ -28,13 +28,17 @@ import (
 
 // MockSourceConfig is used to mock source config in tests
 type MockSourceConfig struct {
-	Name string `yaml:"name"`
-	Type string `yaml:"type"`
-	Foo  string `yaml:"foo"`
+	Name     string `yaml:"name"`
+	Type     string `yaml:"type"`
+	Foo      string `yaml:"foo"`
+	ReadOnly bool   `yaml:"readOnly"`
 }
 
 func (m MockSourceConfig) SourceConfigType() string {
-	return m.Type
+	if m.Type != "" {
+		return m.Type
+	}
+	return "mock-db"
 }
 
 func (m MockSourceConfig) Initialize(ctx context.Context, tracer trace.Tracer) (sources.Source, error) {
@@ -47,7 +51,14 @@ type MockSource struct {
 }
 
 func (s MockSource) SourceType() string {
-	return s.Type
+	if s.Type != "" {
+		return s.Type
+	}
+	return "mock-db"
+}
+
+func (s MockSource) IsReadOnly() bool {
+	return s.ReadOnly
 }
 
 func (s MockSource) ToConfig() sources.SourceConfig {
@@ -56,10 +67,11 @@ func (s MockSource) ToConfig() sources.SourceConfig {
 
 // MockToolConfig is used to mock tool config in tests
 type MockToolConfig struct {
-	tools.ConfigBase `yaml:",inline"`
-	Source           string                `yaml:"source"`
-	Parameters       parameters.Parameters `yaml:"parameters"`
-	Type             string                `yaml:"type"`
+	tools.ConfigBase  `yaml:",inline"`
+	Source            string                `yaml:"source"`
+	Parameters        parameters.Parameters `yaml:"parameters"`
+	Type              string                `yaml:"type"`
+	ErrValidateSource error
 }
 
 func (m MockToolConfig) ToolConfigType() string {
@@ -67,12 +79,26 @@ func (m MockToolConfig) ToolConfigType() string {
 }
 
 func (m MockToolConfig) Initialize(context.Context) (tools.Tool, error) {
+	var annotations *tools.ToolAnnotations
+	switch m.Name {
+	case "readonly-tool":
+		readOnlyHint := true
+		annotations = &tools.ToolAnnotations{ReadOnlyHint: &readOnlyHint}
+	case "write-tool":
+		readOnlyHint := false
+		annotations = &tools.ToolAnnotations{ReadOnlyHint: &readOnlyHint}
+	}
 	return MockTool{
 		BaseTool: tools.NewBaseTool(
-			m, tools.GetAnnotationsOrDefault(&tools.ToolAnnotations{}, nil),
+			m, tools.GetAnnotationsOrDefault(annotations, func() *tools.ToolAnnotations { return &tools.ToolAnnotations{} }),
 			tools.Manifest{Description: m.Description, Parameters: m.Parameters.Manifest(), AuthRequired: m.AuthRequired},
 			m.Parameters,
 		),
+		Name:              m.Name,
+		Description:       m.Description,
+		Source:            m.Source,
+		Annotations:       annotations,
+		ErrValidateSource: m.ErrValidateSource,
 	}, nil
 }
 
@@ -81,9 +107,15 @@ var _ tools.ToolConfig = MockToolConfig{}
 // MockTool is used to mock tools in tests
 type MockTool struct {
 	tools.BaseTool[MockToolConfig]
+	Name                       string
+	Description                string
+	Source                     string
+	Params                     []parameters.Parameter
 	unauthorized               bool
 	requireClientAuthorization bool
 	ReturnParamsInInvoke       bool
+	Annotations                *tools.ToolAnnotations
+	ErrValidateSource          error
 }
 
 var _ tools.Tool = MockTool{}
@@ -123,7 +155,17 @@ func (t MockTool) Invoke(ctx context.Context, s sources.Source, params parameter
 }
 
 func (t MockTool) GetSourceName() string {
+	if t.Source != "" {
+		return t.Source
+	}
 	return t.Cfg.Source
+}
+
+func (t MockTool) GetName() string {
+	if t.Name != "" {
+		return t.Name
+	}
+	return t.Cfg.Name
 }
 
 func (t MockTool) ToConfig() tools.ToolConfig {
@@ -136,7 +178,10 @@ func (t MockTool) Authorized(verifiedAuthServices []string) bool {
 }
 
 func (t MockTool) ValidateSource(src sources.Source) error {
-	if src == nil || src.SourceType() == "mock-source" {
+	if t.ErrValidateSource != nil {
+		return t.ErrValidateSource
+	}
+	if src == nil || src.SourceType() == "mock-source" || src.SourceType() == "mock-db" || src.SourceType() == "mock-non-readonly-db" {
 		return nil
 	}
 	return fmt.Errorf("invalid source for %q tool: source %q is not a compatible type", t.Cfg.Type, t.Cfg.Source)
@@ -148,7 +193,7 @@ func (t MockTool) ParseParams(data map[string]any, claimsMap map[string]map[stri
 }
 
 func (t MockTool) GetAnnotations() *tools.ToolAnnotations {
-	return nil
+	return t.Annotations
 }
 
 // MockPrompt is used to mock prompts in tests
@@ -215,4 +260,44 @@ func NewMockPrompt(name, desc string, args prompts.Arguments) MockPrompt {
 		Args:        args,
 		manifest:    manifest,
 	}
+}
+
+// MockReadOnlySource is a mock source that implements sources.Source.
+type MockReadOnlySource struct {
+	ReadOnly bool
+}
+
+func (m *MockReadOnlySource) Initialize(ctx context.Context) error { return nil }
+func (m *MockReadOnlySource) Cleanup() error                       { return nil }
+func (m *MockReadOnlySource) IsReadOnly() bool                     { return m.ReadOnly }
+func (m *MockReadOnlySource) SourceType() string                   { return "mock-db" }
+func (m *MockReadOnlySource) ToConfig() sources.SourceConfig       { return nil }
+
+var _ sources.Source = (*MockReadOnlySource)(nil)
+
+type MockReadOnlySourceConfig struct {
+	ReadOnly bool
+}
+
+func (m MockReadOnlySourceConfig) SourceConfigType() string { return "mock-db" }
+func (m MockReadOnlySourceConfig) Initialize(ctx context.Context, tracer trace.Tracer) (sources.Source, error) {
+	return &MockReadOnlySource{ReadOnly: m.ReadOnly}, nil
+}
+
+// MockNonReadOnlySource is a mock source that is not in read-only mode.
+type MockNonReadOnlySource struct{}
+
+func (m *MockNonReadOnlySource) Initialize(ctx context.Context) error { return nil }
+func (m *MockNonReadOnlySource) Cleanup() error                       { return nil }
+func (m *MockNonReadOnlySource) IsReadOnly() bool                     { return false }
+func (m *MockNonReadOnlySource) SourceType() string                   { return "mock-non-readonly-db" }
+func (m *MockNonReadOnlySource) ToConfig() sources.SourceConfig       { return nil }
+
+var _ sources.Source = (*MockNonReadOnlySource)(nil)
+
+type MockNonReadOnlySourceConfig struct{}
+
+func (m MockNonReadOnlySourceConfig) SourceConfigType() string { return "mock-non-readonly-db" }
+func (m MockNonReadOnlySourceConfig) Initialize(ctx context.Context, tracer trace.Tracer) (sources.Source, error) {
+	return &MockNonReadOnlySource{}, nil
 }

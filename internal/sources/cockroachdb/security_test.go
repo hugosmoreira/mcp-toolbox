@@ -447,8 +447,8 @@ func TestRedactSQL(t *testing.T) {
 	}
 }
 
-// TestIsReadOnlyMode tests read-only mode detection
-func TestIsReadOnlyMode(t *testing.T) {
+// TestIsReadOnly tests read-only mode detection
+func TestIsReadOnly(t *testing.T) {
 	tests := []struct {
 		name            string
 		readOnlyMode    bool
@@ -470,9 +470,9 @@ func TestIsReadOnlyMode(t *testing.T) {
 				},
 			}
 
-			result := source.IsReadOnlyMode()
+			result := source.IsReadOnly()
 			if result != tt.expected {
-				t.Errorf("IsReadOnlyMode() = %v, want %v", result, tt.expected)
+				t.Errorf("IsReadOnly() = %v, want %v", result, tt.expected)
 			}
 		})
 	}

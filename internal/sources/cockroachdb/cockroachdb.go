@@ -275,8 +275,8 @@ func IsWriteOperation(sqlType SQLStatementType) bool {
 	}
 }
 
-// IsReadOnlyMode returns whether the source is in read-only mode
-func (s *Source) IsReadOnlyMode() bool {
+// IsReadOnly returns whether the source is in read-only mode
+func (s *Source) IsReadOnly() bool {
 	return s.ReadOnlyMode && !s.EnableWriteMode
 }
 
@@ -284,7 +284,7 @@ func (s *Source) IsReadOnlyMode() bool {
 func (s *Source) CanExecuteWrite(sql string) error {
 	sqlType := ClassifySQL(sql)
 
-	if IsWriteOperation(sqlType) && s.IsReadOnlyMode() {
+	if IsWriteOperation(sqlType) && s.IsReadOnly() {
 		return &StructuredError{
 			Code:    ErrCodeReadOnlyViolation,
 			Message: "Write operations are not allowed in read-only mode. Set enableWriteMode: true to allow writes.",

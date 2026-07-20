@@ -1857,6 +1857,16 @@ func TestInitializeConfigs(t *testing.T) {
 	})
 }
 
+type offlinePromptConfig struct {
+	name string
+}
+
+func (c offlinePromptConfig) PromptConfigType() string { return "offline-test-prompt" }
+
+func (c offlinePromptConfig) Initialize() (prompts.Prompt, error) {
+	return testutils.NewMockPrompt(c.name, "offline prompt", nil), nil
+}
+
 func TestInitializeOfflineConfigs(t *testing.T) {
 	ctx, err := testutils.ContextWithNewLogger()
 	if err != nil {
@@ -1965,18 +1975,170 @@ func TestDefaultToolsetIsAlphabeticallySorted(t *testing.T) {
 		},
 	}
 
-	_, toolsetsMap, err := server.InitializeOfflineConfigs(ctx, cfg)
+	_, groupsMap, err := server.InitializeOfflineConfigs(ctx, cfg)
 	if err != nil {
 		t.Fatalf("InitializeOfflineConfigs returned error: %s", err)
 	}
 
-	defaultToolset, ok := toolsetsMap[""]
+	defaultGroup, ok := groupsMap[""]
 	if !ok {
-		t.Fatal("expected default toolset to be present")
+		t.Fatal("expected default group to be present")
 	}
 
 	expectedOrder := []string{"apple", "banana", "zoo"}
-	if diff := cmp.Diff(expectedOrder, defaultToolset.ToolNames); diff != "" {
-		t.Errorf("default toolset ToolNames mismatch (-want +got):\n%s", diff)
+	if diff := cmp.Diff(expectedOrder, defaultGroup.ToolNames); diff != "" {
+		t.Errorf("default group ToolNames mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestDefaultPromptsetIsAlphabeticallySorted(t *testing.T) {
+	ctx, err := testutils.ContextWithNewLogger()
+	if err != nil {
+		t.Fatalf("error setting up logger: %s", err)
+	}
+	instrumentation, err := telemetry.CreateTelemetryInstrumentation("0.0.0")
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	ctx = util.WithInstrumentation(ctx, instrumentation)
+
+	cfg := server.ServerConfig{
+		Version: "0.0.0",
+		PromptConfigs: server.PromptConfigs{
+			"zoo":    offlinePromptConfig{name: "zoo"},
+			"apple":  offlinePromptConfig{name: "apple"},
+			"banana": offlinePromptConfig{name: "banana"},
+		},
+	}
+
+	_, _, _, _, _, groupsMap, err := server.InitializeConfigs(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Initialize returned error: %s", err)
+	}
+
+	defaultGroup, ok := groupsMap[""]
+	if !ok {
+		t.Fatal("expected default group to be present")
+	}
+
+	expectedOrder := []string{"apple", "banana", "zoo"}
+	if diff := cmp.Diff(expectedOrder, defaultGroup.PromptNames); diff != "" {
+		t.Errorf("default group PromptNames mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestShouldSuppressTool(t *testing.T) {
+	ctx := context.Background()
+	logger, err := log.NewStdLogger(io.Discard, io.Discard, "info")
+	if err != nil {
+		t.Fatalf("unexpected error setting up logger: %v", err)
+	}
+
+	readOnlySource := &testutils.MockSource{MockSourceConfig: testutils.MockSourceConfig{Name: "readonly-db", ReadOnly: true}}
+	writeSource := &testutils.MockSource{MockSourceConfig: testutils.MockSourceConfig{Name: "write-db", ReadOnly: false}}
+
+	sourcesMap := map[string]sources.Source{
+		"readonly-db": readOnlySource,
+		"write-db":    writeSource,
+	}
+
+	boolPtr := func(b bool) *bool { return &b }
+
+	testCases := []struct {
+		desc       string
+		sourcesMap map[string]sources.Source
+		tool       tools.Tool
+		want       bool
+	}{
+		{
+			desc:       "nil sourcesMap",
+			sourcesMap: nil,
+			tool:       testutils.MockTool{Name: "readonly-tool", Source: "readonly-db", Annotations: &tools.ToolAnnotations{ReadOnlyHint: boolPtr(true)}},
+			want:       false,
+		},
+		{
+			desc:       "empty source name",
+			sourcesMap: sourcesMap,
+			tool:       testutils.MockTool{Name: "write-tool", Source: "", Annotations: &tools.ToolAnnotations{ReadOnlyHint: boolPtr(false)}},
+			want:       false,
+		},
+		{
+			desc:       "source not found in sourcesMap",
+			sourcesMap: sourcesMap,
+			tool:       testutils.MockTool{Name: "write-tool", Source: "unknown-db", Annotations: &tools.ToolAnnotations{ReadOnlyHint: boolPtr(false)}},
+			want:       false,
+		},
+		{
+			desc:       "source is not read-only",
+			sourcesMap: sourcesMap,
+			tool:       testutils.MockTool{Name: "write-tool", Source: "write-db", Annotations: &tools.ToolAnnotations{ReadOnlyHint: boolPtr(false)}},
+			want:       false,
+		},
+		{
+			desc:       "write tool on read-only source (readOnlyHint: false) -> suppressed",
+			sourcesMap: sourcesMap,
+			tool:       testutils.MockTool{Name: "write-tool", Source: "readonly-db", Annotations: &tools.ToolAnnotations{ReadOnlyHint: boolPtr(false)}},
+			want:       true,
+		},
+		{
+			desc:       "read-only tool on read-only source (readOnlyHint: true) -> not suppressed",
+			sourcesMap: sourcesMap,
+			tool:       testutils.MockTool{Name: "readonly-tool", Source: "readonly-db", Annotations: &tools.ToolAnnotations{ReadOnlyHint: boolPtr(true)}},
+			want:       false,
+		},
+		{
+			desc:       "unannotated tool on read-only source -> not suppressed",
+			sourcesMap: sourcesMap,
+			tool:       testutils.MockTool{Name: "unannotated-tool", Source: "readonly-db", Annotations: nil},
+			want:       false,
+		},
+		{
+			desc:       "tool with non-nil annotations but nil readOnlyHint on read-only source -> not suppressed",
+			sourcesMap: sourcesMap,
+			tool:       testutils.MockTool{Name: "nil-hint-tool", Source: "readonly-db", Annotations: &tools.ToolAnnotations{ReadOnlyHint: nil}},
+			want:       false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			got := server.ShouldSuppressTool(ctx, logger, tc.tool, tc.sourcesMap)
+			if got != tc.want {
+				t.Errorf("ShouldSuppressTool() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestInitializeTools_ValidateSourceFailure(t *testing.T) {
+	ctx, err := testutils.ContextWithNewLogger()
+	if err != nil {
+		t.Fatalf("error setting up logger: %s", err)
+	}
+	instrumentation, err := telemetry.CreateTelemetryInstrumentation("0.0.0")
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	ctx = util.WithInstrumentation(ctx, instrumentation)
+
+	cfg := server.ServerConfig{
+		SourceConfigs: server.SourceConfigs{
+			"mock-db": testutils.MockSourceConfig{ReadOnly: false},
+		},
+		ToolConfigs: server.ToolConfigs{
+			"invalid-source-tool": &testutils.MockToolConfig{
+				ConfigBase:        tools.ConfigBase{Name: "invalid-source-tool"},
+				Source:            "mock-db",
+				ErrValidateSource: fmt.Errorf("incompatible source type"),
+			},
+		},
+	}
+
+	_, _, _, _, _, _, err = server.InitializeConfigs(ctx, cfg)
+	if err == nil {
+		t.Fatalf("expected error from ValidateSource failure, got nil")
+	}
+	if !strings.Contains(err.Error(), "incompatible source type") {
+		t.Errorf("unexpected error message: %v", err)
 	}
 }

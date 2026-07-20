@@ -34,6 +34,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/go-chi/httplog/v3"
 	"github.com/go-chi/render"
+
 	"github.com/googleapis/mcp-toolbox/internal/auth"
 	"github.com/googleapis/mcp-toolbox/internal/embeddingmodels"
 	"github.com/googleapis/mcp-toolbox/internal/group"
@@ -302,6 +303,11 @@ func initializeTools(ctx context.Context, cfg ServerConfig, sourcesMap map[strin
 		if err != nil {
 			return nil, err
 		}
+
+		if ShouldSuppressTool(ctx, l, t, sourcesMap) {
+			continue
+		}
+
 		toolsMap[name] = t
 	}
 	toolNames := make([]string, 0, len(toolsMap))
@@ -310,6 +316,35 @@ func initializeTools(ctx context.Context, cfg ServerConfig, sourcesMap map[strin
 	}
 	l.InfoContext(ctx, fmt.Sprintf("Initialized %d tools: %s", len(toolsMap), strings.Join(toolNames, ", ")))
 	return toolsMap, nil
+}
+
+func ShouldSuppressTool(ctx context.Context, l log.Logger, t tools.Tool, sourcesMap map[string]sources.Source) bool {
+	if sourcesMap == nil {
+		return false
+	}
+
+	sourceName := t.GetSourceName()
+	if sourceName == "" {
+		return false
+	}
+
+	src, ok := sourcesMap[sourceName]
+	if !ok || !src.IsReadOnly() {
+		return false
+	}
+
+	toolName := t.GetName()
+	annotations := t.GetAnnotations()
+	if annotations != nil && annotations.ReadOnlyHint != nil {
+		if !*annotations.ReadOnlyHint {
+			l.InfoContext(ctx, fmt.Sprintf("Suppressing write-capable tool %q bound to read-only source %q", toolName, sourceName))
+			return true
+		}
+		return false
+	}
+
+	l.WarnContext(ctx, fmt.Sprintf("Tool %q bound to read-only source %q lacks ReadOnlyHint annotation; executing this tool may fail if it attempts write operations. If this tool is meant to be read-only, please add 'readOnlyHint: true' to its annotations. Otherwise, add 'readOnlyHint: false' to suppress it in read-only mode and save agent context window.", toolName, sourceName))
+	return false
 }
 
 // initializeGroups seeds a default nameless group containing all tools and all
@@ -323,6 +358,7 @@ func initializeGroups(ctx context.Context, cfg ServerConfig, toolsMap map[string
 		allToolNames = append(allToolNames, name)
 	}
 	slices.Sort(allToolNames)
+
 	allPromptNames := make([]string, 0, len(promptsMap))
 	for name := range promptsMap {
 		allPromptNames = append(allPromptNames, name)
@@ -347,17 +383,20 @@ func initializeGroups(ctx context.Context, cfg ServerConfig, toolsMap map[string
 
 	groupsMap := make(map[string]group.Group)
 	for name, gc := range groupConfigs {
-		if cfg.IgnoreUnknownTools {
-			filteredToolNames := make([]string, 0, len(gc.ToolNames))
-			for _, tn := range gc.ToolNames {
-				if _, ok := toolsMap[tn]; ok {
-					filteredToolNames = append(filteredToolNames, tn)
-				} else {
-					l.WarnContext(ctx, fmt.Sprintf("Skipping missing tool %q in group %q", tn, name))
-				}
+		filteredToolNames := make([]string, 0, len(gc.ToolNames))
+		for _, tn := range gc.ToolNames {
+			if _, ok := toolsMap[tn]; ok {
+				filteredToolNames = append(filteredToolNames, tn)
+			} else if _, isTool := cfg.ToolConfigs[tn]; isTool {
+				l.InfoContext(ctx, fmt.Sprintf("Removing suppressed tool %q from group %q", tn, name))
+			} else if cfg.IgnoreUnknownTools {
+				l.WarnContext(ctx, fmt.Sprintf("Skipping missing tool %q in group %q", tn, name))
+			} else {
+				// Keep it so that Initialize returns the expected error
+				filteredToolNames = append(filteredToolNames, tn)
 			}
-			gc.ToolNames = filteredToolNames
 		}
+		gc.ToolNames = filteredToolNames
 
 		g, err := func() (group.Group, error) {
 			_, span := instrumentation.Tracer.Start(
