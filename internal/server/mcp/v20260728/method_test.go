@@ -1238,6 +1238,7 @@ func TestToolsCallHandlerWithSecureParams(t *testing.T) {
 	secureTool := testutils.NewMockTool(
 		"secure_tool",
 		"A tool with secure parameters",
+		"",
 		parameters.Parameters{
 			&parameters.StringParameter{
 				CommonParameter: parameters.CommonParameter{
