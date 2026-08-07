@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.9.0](https://github.com/googleapis/mcp-toolbox/compare/v1.8.0...v1.9.0) (2026-08-07)
+
+
+### Features
+
+* **bigtable:** Add admin lifecycle and listing tools ([#3596](https://github.com/googleapis/mcp-toolbox/issues/3596)) ([801d589](https://github.com/googleapis/mcp-toolbox/commit/801d5899665c120200d64bac45172741a785ae5d))
+* Improve error messaging on missing envrionment variables ([#3718](https://github.com/googleapis/mcp-toolbox/issues/3718)) ([11ae3b5](https://github.com/googleapis/mcp-toolbox/commit/11ae3b5254dfc5bdda1f71d330cbc7d813119111))
+* **skill:** Add review-prs skill for mcp-toolbox ([#3743](https://github.com/googleapis/mcp-toolbox/issues/3743)) ([5b7bacc](https://github.com/googleapis/mcp-toolbox/commit/5b7bacc73b9284160b73c4c3f7a53214c653e64a))
+* **source/bigquery:** Add apiEndpoint field to override BigQuery API host ([#3437](https://github.com/googleapis/mcp-toolbox/issues/3437)) ([4da1600](https://github.com/googleapis/mcp-toolbox/commit/4da1600df9971789a0970d174be3c2ed1368f7c1))
+* **sources/spanner:** Rename execute_sql_dql to execute_sql_readonly ([#3776](https://github.com/googleapis/mcp-toolbox/issues/3776)) ([cf5a0c8](https://github.com/googleapis/mcp-toolbox/commit/cf5a0c8fbf52f1e09fc565109682cf52b6ebd553))
+* **tools/looker:** Add additional tools to allow dashboards to be modified, and their layouts altered. ([#3597](https://github.com/googleapis/mcp-toolbox/issues/3597)) ([b2b80fb](https://github.com/googleapis/mcp-toolbox/commit/b2b80fbea64b6284f68b49c0ad3270ed79655282))
+
+
+### Bug Fixes
+
+* **tools/bigquery:** Keep the provider error classification in bigquery-execute-sql ([#3738](https://github.com/googleapis/mcp-toolbox/issues/3738)) ([42570b8](https://github.com/googleapis/mcp-toolbox/commit/42570b833656fdf71cf36ba3333a2419f48730d2))
+
 ## [1.8.0](https://github.com/googleapis/mcp-toolbox/compare/v1.7.0...v1.8.0) (2026-07-28)
 
 
